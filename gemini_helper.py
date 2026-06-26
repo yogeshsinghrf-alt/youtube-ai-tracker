@@ -1,52 +1,15 @@
-import google.generativeai as genai
+import requests
 import config
-
-def get_best_model():
-    """
-    Queries the Gemini API for available models and selects the best flash model.
-    Falls back to a standard default if listing fails.
-    """
-    fallback_models = [
-        "gemini-2.0-flash",
-        "gemini-2.5-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro",
-        "gemini-pro"
-    ]
-    try:
-        available_models = []
-        for m in genai.list_models():
-            if "generateContent" in m.supported_generation_methods:
-                # model names look like 'models/gemini-1.5-flash'
-                model_name = m.name.split("/")[-1]
-                available_models.append(model_name)
-        
-        # Check our preferred models in order of priority
-        for model in fallback_models:
-            if model in available_models:
-                print(f"Selected Gemini model: {model}")
-                return model
-                
-        if available_models:
-            print(f"Selected first available model: {available_models[0]}")
-            return available_models[0]
-    except Exception as e:
-        print(f"Warning: Could not list models ({e}). Defaulting to 'gemini-2.0-flash'.")
-    
-    return "gemini-2.0-flash"
 
 def analyze_trends(videos):
     """
-    Sends the list of outperforming videos to Gemini to identify key trends,
+    Sends the list of outperforming videos to Groq (Llama 3) to identify key trends,
     summarize why they are performing well, and generate YouTube content ideas.
     """
-    if not config.GEMINI_API_KEY:
-        print("Warning: GEMINI_API_KEY is not set. Skipping AI analysis.")
+    if not config.GROQ_API_KEY:
+        print("Warning: GROQ_API_KEY is not set. Skipping AI analysis.")
         return None
 
-    # Configure Gemini API
-    genai.configure(api_key=config.GEMINI_API_KEY)
-    
     # Format the video data for the prompt
     video_list_str = ""
     for idx, video in enumerate(videos, 1):
@@ -75,12 +38,36 @@ Please analyze this data and generate a professional, highly readable report wit
 Format the output clearly and beautifully using markdown so it can be directly embedded into an email. Avoid using generic boilerplate text.
 """
 
-    try:
-        model_name = get_best_model()
-        model = genai.GenerativeModel(model_name)
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        print(f"Error calling Gemini API: {e}")
-        return None
+    headers = {
+        "Authorization": f"Bearer {config.GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
 
+    # Llama 3 8B is extremely fast, accurate, and completely free on Groq's tier
+    payload = {
+        "model": "llama3-8b-8192",
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "temperature": 0.7
+    }
+
+    try:
+        print("Connecting to Groq API (using llama3-8b-8192)...")
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            json=payload,
+            headers=headers
+        )
+        if response.status_code == 200:
+            result = response.json()
+            return result["choices"][0]["message"]["content"]
+        else:
+            print(f"Error calling Groq API: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        print(f"Exception calling Groq API: {e}")
+        return None
