@@ -1,6 +1,40 @@
 import google.generativeai as genai
 import config
 
+def get_best_model():
+    """
+    Queries the Gemini API for available models and selects the best flash model.
+    Falls back to a standard default if listing fails.
+    """
+    fallback_models = [
+        "gemini-2.0-flash",
+        "gemini-2.5-flash",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+        "gemini-pro"
+    ]
+    try:
+        available_models = []
+        for m in genai.list_models():
+            if "generateContent" in m.supported_generation_methods:
+                # model names look like 'models/gemini-1.5-flash'
+                model_name = m.name.split("/")[-1]
+                available_models.append(model_name)
+        
+        # Check our preferred models in order of priority
+        for model in fallback_models:
+            if model in available_models:
+                print(f"Selected Gemini model: {model}")
+                return model
+                
+        if available_models:
+            print(f"Selected first available model: {available_models[0]}")
+            return available_models[0]
+    except Exception as e:
+        print(f"Warning: Could not list models ({e}). Defaulting to 'gemini-2.0-flash'.")
+    
+    return "gemini-2.0-flash"
+
 def analyze_trends(videos):
     """
     Sends the list of outperforming videos to Gemini to identify key trends,
@@ -42,10 +76,11 @@ Format the output clearly and beautifully using markdown so it can be directly e
 """
 
     try:
-        # Use gemini-1.5-flash for fast and reliable performance
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model_name = get_best_model()
+        model = genai.GenerativeModel(model_name)
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
         print(f"Error calling Gemini API: {e}")
         return None
+
