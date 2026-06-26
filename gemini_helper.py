@@ -1,9 +1,46 @@
 import requests
 import config
 
+def get_best_groq_model():
+    """
+    Queries the Groq API for available models and selects the best active model.
+    Falls back to a standard default if listing fails.
+    """
+    fallback_models = [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-70b-versatile",
+        "llama3-70b-8192",
+        "mixtral-8x7b-32768",
+        "llama-3.2-3b-preview",
+        "gemma2-9b-it"
+    ]
+    headers = {
+        "Authorization": f"Bearer {config.GROQ_API_KEY}"
+    }
+    try:
+        response = requests.get("https://api.groq.com/openai/v1/models", headers=headers)
+        if response.status_code == 200:
+            models_data = response.json().get("data", [])
+            available_models = [m["id"] for m in models_data]
+            
+            # Find the best matching model from our fallback list
+            for model in fallback_models:
+                if model in available_models:
+                    print(f"Selected Groq model: {model}")
+                    return model
+            
+            # If none of our fallbacks match, return the first one available
+            if available_models:
+                print(f"Selected first available Groq model: {available_models[0]}")
+                return available_models[0]
+    except Exception as e:
+        print(f"Warning: Could not list Groq models ({e}). Defaulting to 'llama-3.3-70b-versatile'.")
+    
+    return "llama-3.3-70b-versatile"
+
 def analyze_trends(videos):
     """
-    Sends the list of outperforming videos to Groq (Llama 3) to identify key trends,
+    Sends the list of outperforming videos to Groq to identify key trends,
     summarize why they are performing well, and generate YouTube content ideas.
     """
     if not config.GROQ_API_KEY:
@@ -43,9 +80,11 @@ Format the output clearly and beautifully using markdown so it can be directly e
         "Content-Type": "application/json"
     }
 
-    # Llama 3 8B is extremely fast, accurate, and completely free on Groq's tier
+    # Dynamically resolve active model
+    model_name = get_best_groq_model()
+
     payload = {
-        "model": "llama3-8b-8192",
+        "model": model_name,
         "messages": [
             {
                 "role": "user",
@@ -56,7 +95,7 @@ Format the output clearly and beautifully using markdown so it can be directly e
     }
 
     try:
-        print("Connecting to Groq API (using llama3-8b-8192)...")
+        print(f"Connecting to Groq API (using {model_name})...")
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             json=payload,
